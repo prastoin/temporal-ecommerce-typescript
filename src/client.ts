@@ -1,6 +1,10 @@
-import { Connection, WorkflowClient } from '@temporalio/client';
-import { example } from './workflows';
-import { nanoid } from 'nanoid';
+import { Connection, WorkflowClient } from "@temporalio/client";
+import { nanoid } from "nanoid";
+import {
+  addToCarteSignal,
+  cartWorkflow,
+  removeFromCartSignal,
+} from "./workflows";
 
 async function run() {
   // Connect to the default Server location (localhost:7233)
@@ -16,16 +20,28 @@ async function run() {
     // namespace: 'foo.bar', // connects to 'default' namespace if not specified
   });
 
-  const handle = await client.start(example, {
+  const initialProduct = {
+    id: 0,
+    name: "product-0",
+  };
+  const workflowId = "workflow-" + nanoid();
+  console.log({ cartWorkflow });
+  const handle = await client.start(cartWorkflow, {
     // type inference works! args: [name: string]
-    args: ['Temporal'],
-    taskQueue: 'hello-world',
+    args: [initialProduct],
+    taskQueue: "hello-world",
     // in practice, use a meaningful business id, eg customerId or transactionId
-    workflowId: 'workflow-' + nanoid(),
+    workflowId,
   });
   console.log(`Started workflow ${handle.workflowId}`);
 
   // optional: wait for client result
+  setTimeout(() => handle.signal(removeFromCartSignal, initialProduct), 10000);
+  setTimeout(
+    () => handle.signal(addToCarteSignal, { id: 1, name: "item-1" }),
+    2000
+  );
+
   console.log(await handle.result()); // Hello, Temporal!
 }
 
