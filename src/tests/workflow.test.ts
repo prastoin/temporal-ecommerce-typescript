@@ -1,6 +1,7 @@
 import { TestWorkflowEnvironment } from "@temporalio/testing";
 import { DefaultLogger, LogEntry, Runtime, Worker } from "@temporalio/worker";
 import { nanoid } from "nanoid";
+import * as activities from "../activities";
 import {
   abandonedCartTimeoutMs,
   addToCartSignal,
@@ -34,6 +35,7 @@ test("Add and remove from cart", async () => {
     connection: nativeConnection,
     taskQueue: "test",
     workflowsPath: require.resolve("../workflows"),
+    activities,
   });
 
   const initialProduct = {
@@ -82,10 +84,20 @@ test("Add and remove from cart", async () => {
 
 test("Abandonned cart", async () => {
   const { client, nativeConnection } = testEnv;
+  const mockActivities: Partial<typeof activities> = {
+    sendAbandonedCartEmail: async (email) => {
+      console.log(`mock is called ${email}`);
+    },
+  };
+  const sendAbandonedCartEmailSpy = jest.spyOn(
+    mockActivities,
+    "sendAbandonedCartEmail"
+  );
   const worker = await Worker.create({
     connection: nativeConnection,
     taskQueue: "test",
     workflowsPath: require.resolve("../workflows"),
+    activities: mockActivities,
   });
 
   const initialProduct = {
@@ -105,6 +117,7 @@ test("Abandonned cart", async () => {
 
     const result = await handle.result();
     expect(result).toBe("abandoned_cart");
+    expect(sendAbandonedCartEmailSpy).toBeCalledTimes(1);
 
     return;
   });

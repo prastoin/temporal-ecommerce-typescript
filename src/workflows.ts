@@ -65,7 +65,6 @@ export async function cartWorkflow(initialProduct: Product): Promise<string> {
   await wf.condition(() => cartIsEmpty() || abandonedCart);
 
   if (abandonedCart) {
-    console.log("Should be sending an email");
     await sendAbandonedCartEmail("who@where.domain");
     return "abandoned_cart";
   }
