@@ -1,6 +1,7 @@
 // Only import the activity types
 import * as wf from "@temporalio/workflow";
-// import type * as activities from "./activities";
+import { proxyActivities } from "@temporalio/workflow";
+import type * as activities from "./activities";
 
 interface Product {
   name: string;
@@ -10,6 +11,11 @@ interface Product {
 export interface WorkflowState {
   productCollection: Product[];
 }
+
+// Activities
+const { sendAbandonedCartEmail } = proxyActivities<typeof activities>({
+  startToCloseTimeout: "1 minute",
+});
 
 // Signals
 export const addToCartSignal = wf.defineSignal<[Product]>("addToCart");
@@ -60,7 +66,7 @@ export async function cartWorkflow(initialProduct: Product): Promise<string> {
 
   if (abandonedCart) {
     console.log("Should be sending an email");
-    // TODO send email activity
+    await sendAbandonedCartEmail("who@where.domain");
     return "abandoned_cart";
   }
 

@@ -1,3 +1,3 @@
-export async function greet(name: string): Promise<string> {
-  return `Hello, ${name}!`;
+export async function sendAbandonedCartEmail(email: string): Promise<void> {
+  console.log(`Sending Abandoned cart email to ${email}`);
 }
