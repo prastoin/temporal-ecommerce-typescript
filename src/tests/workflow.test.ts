@@ -1,7 +1,12 @@
 import { TestWorkflowEnvironment } from "@temporalio/testing";
 import { DefaultLogger, LogEntry, Runtime, Worker } from "@temporalio/worker";
 import { nanoid } from "nanoid";
-import { cartWorkflow, getStateQuery, WorkflowState } from "../workflows";
+import {
+  cartWorkflow,
+  getStateQuery,
+  removeFromCartSignal,
+  WorkflowState,
+} from "../workflows";
 
 let testEnv: TestWorkflowEnvironment;
 
@@ -36,24 +41,28 @@ test("httpWorkflow with mock activity", async () => {
   };
   await worker.runUntil(async () => {
     const workflowId = nanoid();
-    try {
-      await client.workflow.start(cartWorkflow, {
-        workflowId,
-        taskQueue: "test",
-        args: [initialProduct],
-      });
+    await client.workflow.start(cartWorkflow, {
+      workflowId,
+      taskQueue: "test",
+      args: [initialProduct],
+    });
 
-      const handle = client.workflow.getHandle(workflowId);
-      const state = await handle.query(getStateQuery);
+    const handle = client.workflow.getHandle(workflowId);
+    let state: WorkflowState = await handle.query(getStateQuery);
+    const expectedWorkflowState: WorkflowState = {
+      productCollection: [initialProduct],
+    };
+    expect(state).toStrictEqual(expectedWorkflowState);
 
-      const expectedWorkflowState: WorkflowState = {
-        productCollection: [initialProduct],
-      };
-      expect(state).toStrictEqual(expectedWorkflowState);
+    await handle.signal(removeFromCartSignal, initialProduct);
+    state = await handle.query(getStateQuery);
+    const expectedEmptyWorkflowState: WorkflowState = {
+      productCollection: [],
+    };
+    expect(state).toStrictEqual(expectedEmptyWorkflowState);
 
-      return;
-    } catch (e) {
-      console.error(e);
-    }
+    const result = await handle.result();
+    expect(result).toBe("workflow_ended");
+    return;
   });
 });

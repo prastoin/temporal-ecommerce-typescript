@@ -19,7 +19,7 @@ export const removeFromCartSignal =
 // Queries
 export const getStateQuery = wf.defineQuery<WorkflowState>("getState");
 
-export async function cartWorkflow(initialProduct: Product): Promise<void> {
+export async function cartWorkflow(initialProduct: Product): Promise<string> {
   console.log("CREATED WORKFLOW ", { initialProduct });
   const state: WorkflowState = {
     productCollection: [initialProduct],
@@ -44,5 +44,5 @@ export async function cartWorkflow(initialProduct: Product): Promise<void> {
 
   await wf.condition(() => state.productCollection.length === 0);
 
-  return;
+  return "workflow_ended";
 }
