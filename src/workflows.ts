@@ -27,6 +27,7 @@ export async function cartWorkflow(initialProduct: Product): Promise<string> {
   const state: WorkflowState = {
     productCollection: [initialProduct],
   };
+  const cartIsEmpty = () => state.productCollection.length === 0;
 
   wf.setHandler(getStateQuery, () => {
     console.log("Received GET STATE QUERY");
@@ -55,9 +56,7 @@ export async function cartWorkflow(initialProduct: Product): Promise<string> {
       console.error(e);
     });
 
-  await wf.condition(
-    () => state.productCollection.length === 0 || abandonedCart
-  );
+  await wf.condition(() => cartIsEmpty() || abandonedCart);
 
   if (abandonedCart) {
     console.log("Should be sending an email");
