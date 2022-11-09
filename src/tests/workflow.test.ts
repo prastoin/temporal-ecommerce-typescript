@@ -1,7 +1,9 @@
 import { TestWorkflowEnvironment } from "@temporalio/testing";
 import { DefaultLogger, LogEntry, Runtime, Worker } from "@temporalio/worker";
 import { nanoid } from "nanoid";
+import * as activities from "../activities";
 import {
+  abandonedCartTimeoutMs,
   addToCartSignal,
   cartWorkflow,
   getStateQuery,
@@ -27,13 +29,13 @@ afterAll(async () => {
   await testEnv?.teardown();
 });
 
-test("httpWorkflow with mock activity", async () => {
-  console.log("Running httpWorkflow with mock activity");
+test("Add and remove from cart", async () => {
   const { client, nativeConnection } = testEnv;
   const worker = await Worker.create({
     connection: nativeConnection,
     taskQueue: "test",
     workflowsPath: require.resolve("../workflows"),
+    activities,
   });
 
   const initialProduct = {
@@ -74,7 +76,49 @@ test("httpWorkflow with mock activity", async () => {
     expect(state).toStrictEqual(expectedEmptyWorkflowState);
 
     const result = await handle.result();
-    expect(result).toBe("workflow_ended");
+    expect(result).toBe("empty_cart");
+
+    return;
+  });
+});
+
+test("Abandonned cart", async () => {
+  const { client, nativeConnection } = testEnv;
+  const mockActivities: Partial<typeof activities> = {
+    sendAbandonedCartEmail: async (email) => {
+      console.log(`mock is called ${email}`);
+    },
+  };
+  const sendAbandonedCartEmailSpy = jest.spyOn(
+    mockActivities,
+    "sendAbandonedCartEmail"
+  );
+  const worker = await Worker.create({
+    connection: nativeConnection,
+    taskQueue: "test",
+    workflowsPath: require.resolve("../workflows"),
+    activities: mockActivities,
+  });
+
+  const initialProduct = {
+    id: 0,
+    name: "item-0",
+  };
+  await worker.runUntil(async () => {
+    const workflowId = nanoid();
+    await client.workflow.start(cartWorkflow, {
+      workflowId,
+      taskQueue: "test",
+      args: [initialProduct],
+    });
+    const handle = client.workflow.getHandle(workflowId);
+
+    await testEnv.sleep(abandonedCartTimeoutMs);
+
+    const result = await handle.result();
+    expect(result).toBe("abandoned_cart");
+    expect(sendAbandonedCartEmailSpy).toBeCalledTimes(1);
+
     return;
   });
 });
