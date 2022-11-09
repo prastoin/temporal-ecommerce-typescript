@@ -12,7 +12,7 @@ export interface WorkflowState {
 }
 
 // Signals
-export const addToCarteSignal = wf.defineSignal<[Product]>("addToCart");
+export const addToCartSignal = wf.defineSignal<[Product]>("addToCart");
 export const removeFromCartSignal =
   wf.defineSignal<[Product]>("removeFromCart");
 
@@ -30,7 +30,7 @@ export async function cartWorkflow(initialProduct: Product): Promise<string> {
     return state;
   });
 
-  wf.setHandler(addToCarteSignal, (newProduct) => {
+  wf.setHandler(addToCartSignal, (newProduct) => {
     console.log("RECEIVED SIGNAL ADD TO CART ", { newProduct });
     state.productCollection = [...state.productCollection, newProduct];
   });

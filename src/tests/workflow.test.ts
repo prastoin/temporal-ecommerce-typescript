@@ -2,6 +2,7 @@ import { TestWorkflowEnvironment } from "@temporalio/testing";
 import { DefaultLogger, LogEntry, Runtime, Worker } from "@temporalio/worker";
 import { nanoid } from "nanoid";
 import {
+  addToCartSignal,
   cartWorkflow,
   getStateQuery,
   removeFromCartSignal,
@@ -46,15 +47,26 @@ test("httpWorkflow with mock activity", async () => {
       taskQueue: "test",
       args: [initialProduct],
     });
-
     const handle = client.workflow.getHandle(workflowId);
+
+    // Initial
     let state: WorkflowState = await handle.query(getStateQuery);
     const expectedWorkflowState: WorkflowState = {
       productCollection: [initialProduct],
     };
     expect(state).toStrictEqual(expectedWorkflowState);
 
+    // Add product
+    const addedProduct = { id: 1, name: "item-1" };
+    await handle.signal(addToCartSignal, addedProduct);
+    state = await handle.query(getStateQuery);
+    expect(state).toStrictEqual({
+      productCollection: [initialProduct, addedProduct],
+    });
+
+    // Double Remove
     await handle.signal(removeFromCartSignal, initialProduct);
+    await handle.signal(removeFromCartSignal, addedProduct);
     state = await handle.query(getStateQuery);
     const expectedEmptyWorkflowState: WorkflowState = {
       productCollection: [],

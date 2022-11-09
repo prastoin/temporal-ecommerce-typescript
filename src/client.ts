@@ -1,10 +1,6 @@
 import { Connection, WorkflowClient } from "@temporalio/client";
 import { nanoid } from "nanoid";
-import {
-  addToCarteSignal,
-  cartWorkflow,
-  removeFromCartSignal,
-} from "./workflows";
+import { cartWorkflow, getStateQuery, removeFromCartSignal } from "./workflows";
 
 async function run() {
   // Connect to the default Server location (localhost:7233)
@@ -35,14 +31,11 @@ async function run() {
   });
   console.log(`Started workflow ${handle.workflowId}`);
 
-  // optional: wait for client result
-  setTimeout(() => handle.signal(removeFromCartSignal, initialProduct), 10000);
-  setTimeout(
-    () => handle.signal(addToCarteSignal, { id: 1, name: "item-1" }),
-    2000
-  );
+  const state = await handle.query(getStateQuery);
+  setTimeout(() => handle.signal(removeFromCartSignal, initialProduct), 6000);
 
-  console.log(await handle.result()); // Hello, Temporal!
+  console.log({ state });
+  console.log("result", await handle.result()); // Hello, Temporal!
 }
 
 run().catch((err) => {
