@@ -10,6 +10,7 @@ interface Product {
 
 export interface WorkflowState {
   productCollection: Product[];
+  email: string;
 }
 
 // Activities
@@ -19,6 +20,7 @@ const { sendAbandonedCartEmail } = proxyActivities<typeof activities>({
 
 // Signals
 export const addToCartSignal = wf.defineSignal<[Product]>("addToCart");
+export const updateEmailSignal = wf.defineSignal<[string]>("updateEmail");
 export const removeFromCartSignal =
   wf.defineSignal<[Product]>("removeFromCart");
 
@@ -27,12 +29,12 @@ export const getStateQuery = wf.defineQuery<WorkflowState>("getState");
 
 export const abandonedCartTimeoutMs = 3000;
 
-export async function cartWorkflow(initialProduct: Product): Promise<string> {
-  console.log("CREATED WORKFLOW ", { initialProduct });
+export async function cartWorkflow(
+  initialWorkflowState: WorkflowState
+): Promise<string> {
+  console.log("CREATED WORKFLOW ", { initialWorkflowState });
   let abandonedCart = false;
-  const state: WorkflowState = {
-    productCollection: [initialProduct],
-  };
+  const state: WorkflowState = initialWorkflowState;
   const cartIsEmpty = () => state.productCollection.length === 0;
 
   wf.setHandler(getStateQuery, () => {
@@ -50,6 +52,11 @@ export async function cartWorkflow(initialProduct: Product): Promise<string> {
     state.productCollection = state.productCollection.filter(
       (product) => product.name !== removedProduct.name
     );
+  });
+
+  wf.setHandler(updateEmailSignal, (newEmail) => {
+    console.log("RECEIVED SIGNAL UDPATE EMAIL", { newEmail });
+    state.email = newEmail;
   });
 
   wf.sleep(abandonedCartTimeoutMs)
