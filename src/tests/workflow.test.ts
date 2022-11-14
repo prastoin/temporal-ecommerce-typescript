@@ -8,6 +8,7 @@ import {
   cartWorkflow,
   getStateQuery,
   removeFromCartSignal,
+  updateEmailSignal,
   WorkflowState,
 } from "../workflows";
 
@@ -29,6 +30,10 @@ afterAll(async () => {
   await testEnv?.teardown();
 });
 
+afterEach(async () => {
+  jest.restoreAllMocks();
+});
+
 test("Add and remove from cart", async () => {
   const { client, nativeConnection } = testEnv;
   const worker = await Worker.create({
@@ -42,27 +47,29 @@ test("Add and remove from cart", async () => {
     id: 0,
     name: "item-0",
   };
+  const initialWorkflowState: WorkflowState = {
+    productCollection: [initialProduct],
+    email: "user@domain.extension",
+  };
   await worker.runUntil(async () => {
     const workflowId = nanoid();
     await client.workflow.start(cartWorkflow, {
       workflowId,
       taskQueue: "test",
-      args: [initialProduct],
+      args: [initialWorkflowState],
     });
     const handle = client.workflow.getHandle(workflowId);
 
     // Initial
     let state: WorkflowState = await handle.query(getStateQuery);
-    const expectedWorkflowState: WorkflowState = {
-      productCollection: [initialProduct],
-    };
-    expect(state).toStrictEqual(expectedWorkflowState);
+    expect(state).toStrictEqual(initialWorkflowState);
 
     // Add product
     const addedProduct = { id: 1, name: "item-1" };
     await handle.signal(addToCartSignal, addedProduct);
     state = await handle.query(getStateQuery);
     expect(state).toStrictEqual({
+      ...initialWorkflowState,
       productCollection: [initialProduct, addedProduct],
     });
 
@@ -71,6 +78,7 @@ test("Add and remove from cart", async () => {
     await handle.signal(removeFromCartSignal, addedProduct);
     state = await handle.query(getStateQuery);
     const expectedEmptyWorkflowState: WorkflowState = {
+      ...initialWorkflowState,
       productCollection: [],
     };
     expect(state).toStrictEqual(expectedEmptyWorkflowState);
@@ -104,12 +112,16 @@ test("Abandonned cart", async () => {
     id: 0,
     name: "item-0",
   };
+  const initialWorkflowState: WorkflowState = {
+    productCollection: [initialProduct],
+    email: "user@domain.extension",
+  };
   await worker.runUntil(async () => {
     const workflowId = nanoid();
     await client.workflow.start(cartWorkflow, {
       workflowId,
       taskQueue: "test",
-      args: [initialProduct],
+      args: [initialWorkflowState],
     });
     const handle = client.workflow.getHandle(workflowId);
 
@@ -118,6 +130,57 @@ test("Abandonned cart", async () => {
     const result = await handle.result();
     expect(result).toBe("abandoned_cart");
     expect(sendAbandonedCartEmailSpy).toBeCalledTimes(1);
+
+    return;
+  });
+});
+
+test("Update workflow email", async () => {
+  const { client, nativeConnection } = testEnv;
+  const mockActivities: Partial<typeof activities> = {
+    sendAbandonedCartEmail: async (email) => {
+      console.log(`mock is called ${email}`);
+    },
+  };
+  const worker = await Worker.create({
+    connection: nativeConnection,
+    taskQueue: "test",
+    workflowsPath: require.resolve("../workflows"),
+    activities: mockActivities,
+  });
+
+  const initialWorkflowState: WorkflowState = {
+    productCollection: [
+      {
+        id: 0,
+        name: "item-0",
+      },
+    ],
+    email: "user@domain.extension",
+  };
+  await worker.runUntil(async () => {
+    const workflowId = nanoid();
+    await client.workflow.start(cartWorkflow, {
+      workflowId,
+      taskQueue: "test",
+      args: [initialWorkflowState],
+    });
+    const handle = client.workflow.getHandle(workflowId);
+    const state = await handle.query(getStateQuery);
+    expect(state).toStrictEqual(initialWorkflowState);
+
+    // Send update email signal
+    const newEmail = "new@email.com";
+    const postUpdateEmailSignalExpectedState = {
+      ...initialWorkflowState,
+      email: newEmail,
+    };
+    await handle.signal(updateEmailSignal, newEmail);
+
+    const postUpdateEmailSignalState = await handle.query(getStateQuery);
+    expect(postUpdateEmailSignalState).toStrictEqual(
+      postUpdateEmailSignalExpectedState
+    );
 
     return;
   });
