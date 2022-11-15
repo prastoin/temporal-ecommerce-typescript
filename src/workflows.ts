@@ -19,6 +19,7 @@ const { sendAbandonedCartEmail } = proxyActivities<typeof activities>({
 });
 
 // Signals
+export const checkoutCartSignal = wf.defineSignal("checkoutCart");
 export const addToCartSignal = wf.defineSignal<[Product]>("addToCart");
 export const updateEmailSignal = wf.defineSignal<[string]>("updateEmail");
 export const removeFromCartSignal =
@@ -34,6 +35,7 @@ export async function cartWorkflow(
 ): Promise<string> {
   console.log("CREATED WORKFLOW ", { initialWorkflowState });
   let abandonedCart = false;
+  let checkedOut = false;
   const state: WorkflowState = initialWorkflowState;
   const cartIsEmpty = () => state.productCollection.length === 0;
 
@@ -59,6 +61,11 @@ export async function cartWorkflow(
     state.email = newEmail;
   });
 
+  wf.setHandler(checkoutCartSignal, () => {
+    console.log("RECEIVED SIGNAL CHECKOUT CART");
+    checkedOut = true;
+  });
+
   wf.sleep(abandonedCartTimeoutMs)
     .then(() => {
       console.log("TIMED OUT ABANDONED CART");
@@ -69,11 +76,15 @@ export async function cartWorkflow(
       console.error(e);
     });
 
-  await wf.condition(() => cartIsEmpty() || abandonedCart);
+  await wf.condition(() => cartIsEmpty() || abandonedCart || checkedOut);
 
   if (abandonedCart) {
     await sendAbandonedCartEmail("who@where.domain");
     return "abandoned_cart";
+  }
+
+  if (checkedOut) {
+    return "checked_out_cart";
   }
 
   return "empty_cart";
