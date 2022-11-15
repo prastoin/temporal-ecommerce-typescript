@@ -1,3 +1,4 @@
+import { faker } from "@faker-js/faker";
 import { TestWorkflowEnvironment } from "@temporalio/testing";
 import { DefaultLogger, LogEntry, Runtime, Worker } from "@temporalio/worker";
 import { nanoid } from "nanoid";
@@ -6,11 +7,13 @@ import {
   abandonedCartTimeoutMs,
   addToCartSignal,
   cartWorkflow,
+  checkoutCartSignal,
   getStateQuery,
   removeFromCartSignal,
   updateEmailSignal,
   WorkflowState,
 } from "../workflows";
+import { getRandomProduct, getWorkflowState } from "./utils";
 
 let testEnv: TestWorkflowEnvironment;
 
@@ -43,14 +46,9 @@ test("Add and remove from cart", async () => {
     activities,
   });
 
-  const initialProduct = {
-    id: 0,
-    name: "item-0",
-  };
-  const initialWorkflowState: WorkflowState = {
-    productCollection: [initialProduct],
-    email: "user@domain.extension",
-  };
+  const initialWorkflowState = getWorkflowState();
+  const initialProduct = initialWorkflowState.productCollection[0];
+
   await worker.runUntil(async () => {
     const workflowId = nanoid();
     await client.workflow.start(cartWorkflow, {
@@ -65,7 +63,7 @@ test("Add and remove from cart", async () => {
     expect(state).toStrictEqual(initialWorkflowState);
 
     // Add product
-    const addedProduct = { id: 1, name: "item-1" };
+    const addedProduct = getRandomProduct();
     await handle.signal(addToCartSignal, addedProduct);
     state = await handle.query(getStateQuery);
     expect(state).toStrictEqual({
@@ -108,14 +106,8 @@ test("Abandonned cart", async () => {
     activities: mockActivities,
   });
 
-  const initialProduct = {
-    id: 0,
-    name: "item-0",
-  };
-  const initialWorkflowState: WorkflowState = {
-    productCollection: [initialProduct],
-    email: "user@domain.extension",
-  };
+  const initialWorkflowState = getWorkflowState();
+
   await worker.runUntil(async () => {
     const workflowId = nanoid();
     await client.workflow.start(cartWorkflow, {
@@ -149,15 +141,8 @@ test("Update workflow email", async () => {
     activities: mockActivities,
   });
 
-  const initialWorkflowState: WorkflowState = {
-    productCollection: [
-      {
-        id: 0,
-        name: "item-0",
-      },
-    ],
-    email: "user@domain.extension",
-  };
+  const initialWorkflowState = getWorkflowState();
+
   await worker.runUntil(async () => {
     const workflowId = nanoid();
     await client.workflow.start(cartWorkflow, {
@@ -170,7 +155,7 @@ test("Update workflow email", async () => {
     expect(state).toStrictEqual(initialWorkflowState);
 
     // Send update email signal
-    const newEmail = "new@email.com";
+    const newEmail = faker.internet.email();
     const postUpdateEmailSignalExpectedState = {
       ...initialWorkflowState,
       email: newEmail,
@@ -181,6 +166,138 @@ test("Update workflow email", async () => {
     expect(postUpdateEmailSignalState).toStrictEqual(
       postUpdateEmailSignalExpectedState
     );
+
+    return;
+  });
+});
+
+test("Add and remove specific quantity", async () => {
+  const { client, nativeConnection } = testEnv;
+  const worker = await Worker.create({
+    connection: nativeConnection,
+    taskQueue: "test",
+    workflowsPath: require.resolve("../workflows"),
+    activities,
+  });
+
+  const initialWorkflowState = getWorkflowState();
+  const initialProduct = initialWorkflowState.productCollection[0];
+
+  await worker.runUntil(async () => {
+    const workflowId = nanoid();
+    await client.workflow.start(cartWorkflow, {
+      workflowId,
+      taskQueue: "test",
+      args: [initialWorkflowState],
+    });
+    const handle = client.workflow.getHandle(workflowId);
+
+    // Initial
+    let state: WorkflowState = await handle.query(getStateQuery);
+    expect(state).toStrictEqual(initialWorkflowState);
+
+    // Add initial product 2 quantity
+    const newInitialProductAddedQuantity = faker.datatype.number({
+      min: 2,
+      max: 300,
+    });
+    await handle.signal(addToCartSignal, {
+      ...initialProduct,
+      quantity: newInitialProductAddedQuantity,
+    });
+    state = await handle.query(getStateQuery);
+
+    const stateFirstProduct = state.productCollection[0];
+    expect(stateFirstProduct).toStrictEqual({
+      ...initialProduct,
+      quantity: initialProduct.quantity + newInitialProductAddedQuantity,
+    });
+
+    // Double Remove
+    await handle.signal(removeFromCartSignal, {
+      ...initialProduct,
+      // Always more then initial + random
+      quantity: 302,
+    });
+    state = await handle.query(getStateQuery);
+    const expectedEmptyWorkflowState: WorkflowState = {
+      ...initialWorkflowState,
+      productCollection: [],
+    };
+    expect(state).toStrictEqual(expectedEmptyWorkflowState);
+
+    const result = await handle.result();
+    expect(result).toBe("empty_cart");
+
+    return;
+  });
+});
+
+test("Add product with negative or 0 quantity", async () => {
+  const { client, nativeConnection } = testEnv;
+  const worker = await Worker.create({
+    connection: nativeConnection,
+    taskQueue: "test",
+    workflowsPath: require.resolve("../workflows"),
+    activities,
+  });
+
+  const initialWorkflowState = getWorkflowState();
+
+  await worker.runUntil(async () => {
+    const workflowId = nanoid();
+    await client.workflow.start(cartWorkflow, {
+      workflowId,
+      taskQueue: "test",
+      args: [initialWorkflowState],
+    });
+    const handle = client.workflow.getHandle(workflowId);
+
+    // Add initial product 2 quantity
+    const newProduct = getRandomProduct({
+      quantity: faker.datatype.number({
+        max: 0,
+      }),
+    });
+    await handle.signal(addToCartSignal, newProduct);
+
+    const state = await handle.query(getStateQuery);
+    expect(state).toStrictEqual(initialWorkflowState);
+
+    return;
+  });
+});
+
+test("Checkout cart", async () => {
+  const { client, nativeConnection } = testEnv;
+  const worker = await Worker.create({
+    connection: nativeConnection,
+    taskQueue: "test",
+    workflowsPath: require.resolve("../workflows"),
+    activities,
+  });
+
+  const initialWorkflowState = getWorkflowState();
+
+  await worker.runUntil(async () => {
+    const workflowId = nanoid();
+    await client.workflow.start(cartWorkflow, {
+      workflowId,
+      taskQueue: "test",
+      args: [initialWorkflowState],
+    });
+    const handle = client.workflow.getHandle(workflowId);
+
+    // Add initial product 2 quantity
+    const newProduct = getRandomProduct({
+      quantity: faker.datatype.number({
+        max: 0,
+      }),
+    });
+    await handle.signal(checkoutCartSignal);
+
+    const result = await handle.result();
+    expect(result).toBe("checked_out_cart");
 
     return;
   });
