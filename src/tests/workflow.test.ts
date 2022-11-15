@@ -6,6 +6,7 @@ import {
   abandonedCartTimeoutMs,
   addToCartSignal,
   cartWorkflow,
+  checkoutCartSignal,
   getStateQuery,
   removeFromCartSignal,
   updateEmailSignal,
@@ -181,6 +182,42 @@ test("Update workflow email", async () => {
     expect(postUpdateEmailSignalState).toStrictEqual(
       postUpdateEmailSignalExpectedState
     );
+
+    return;
+  });
+});
+
+
+test("Checkout cart", async () => {
+  const { client, nativeConnection } = testEnv;
+  const worker = await Worker.create({
+    connection: nativeConnection,
+    taskQueue: "test",
+    workflowsPath: require.resolve("../workflows"),
+    activities,
+  });
+
+  const initialWorkflowState = getWorkflowState();
+
+  await worker.runUntil(async () => {
+    const workflowId = nanoid();
+    await client.workflow.start(cartWorkflow, {
+      workflowId,
+      taskQueue: "test",
+      args: [initialWorkflowState],
+    });
+    const handle = client.workflow.getHandle(workflowId);
+
+    // Add initial product 2 quantity
+    const newProduct = getRandomProduct({
+      quantity: faker.datatype.number({
+        max: 0,
+      }),
+    });
+    await handle.signal(checkoutCartSignal);
+
+    const result = await handle.result();
+    expect(result).toBe("checked_out_cart");
 
     return;
   });
