@@ -8,6 +8,9 @@
     "apps/*",
     "packages/*"
   ],
+  "scripts": {
+    "test": "turbo run test"
+  },
   "devDependencies": {
     "turbo": "^1.6.3"
   }
