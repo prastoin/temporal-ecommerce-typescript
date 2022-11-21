@@ -15,6 +15,8 @@ import {
 } from "../workflows";
 import { getRandomProduct, getWorkflowState } from "./utils";
 
+jest.setTimeout(10_000);
+
 let testEnv: TestWorkflowEnvironment;
 
 beforeAll(async () => {

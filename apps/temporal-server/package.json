@@ -1,0 +1,10 @@
+{
+  "name": "temporal-server",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "tmp": "echo temporal-hello-world be like",
+    "start": "docker-compose up -d",
+    "dev": "docker-compose up -d"
+  }
+}
